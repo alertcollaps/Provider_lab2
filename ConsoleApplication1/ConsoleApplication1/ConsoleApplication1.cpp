@@ -7,7 +7,7 @@
 #include <iostream>
 #include <string>
 #include "Task.h"
-
+//A
 
 int main()
 {
@@ -37,11 +37,29 @@ int main()
     printf("Exported sign key A:\n");
     ExportKey(kSign, 0, "C:\\KeySign.enc", PUBLICKEYBLOB);
     //Task5(hCrProv, nameProv, type, nameCont);
+    DWORD blobMessageLen = 0;
+   
+    BYTE* blobMessage = strToBlob(cins("Enter message: "), blobMessageLen);
+    HCRYPTHASH hCryptHash = CreateHash(hCrProv);
+    //addToHashData(hCryptHash, blobMessage, blobMessageLen);
+    DWORD encMessageLen = blobMessageLen;
+    BYTE* encMessage;
+    encrypt(kSession, hCryptHash, blobMessage, &encMessage, encMessageLen);
     
+    BYTE* signData = 0;
+    DWORD signDataLen = 0;
+    SignHash(hCryptHash, &signData, signDataLen);
+    
+
+    WriteBlobToFile(encMessage, encMessageLen, "C:\\EncMessage.bin");
+    WriteBlobToFile(signData, signDataLen, "C:\\SignMessage.bin");
+    
+    //decrypt(kSession, 0, encMessage, encMessageLen);
     std::cout << std::boolalpha;
     std::cout << "Destroy sign key: " << (bool)CryptDestroyKey(kSign) << std::endl;
     std::cout << "Destroy session key: " << (bool)CryptDestroyKey(kSession) << std::endl;
     std::cout << "Destroy export exchange key: " << (bool)CryptDestroyKey(kProtectedPub) << std::endl;
+    std::cout << "Destroy hash obj: " << (bool)CryptDestroyHash(hCryptHash) << std::endl;
     LocalFree(nameProv);
     return 0;
 }

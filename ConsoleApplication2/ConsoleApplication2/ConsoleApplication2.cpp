@@ -6,18 +6,20 @@
 #include <iostream>
 #include <string>
 #include "Tasks.h"
-
+//B
 int main()
 {
     std::cout << "Hello World!\n";
+    LPCWSTR nameCont = L"Alex";
     printTypes();
     int type = cin("Choose type: ");
     LPTSTR nameProv = printAndGetProviders(type);
-    HCRYPTPROV hCrProv = getProvider(nameProv, type);
+    HCRYPTPROV hCrProv = getProvider(nameProv, type, nameCont);
     ALG_ID alg_id = printAlgosProv(hCrProv);
 
-    LPCWSTR nameCont = L"Alex";
-    HCRYPTKEY kExchange = genKeyExchange(hCrProv, nameProv, type, nameCont);
+    
+    HCRYPTKEY kExchange = genKeyExchange(hCrProv, nameProv, type);
+    
     
     printf("Exported key B:\n");
     ExportKey(kExchange, NULL, "C:\\KeyPubAssymetric.key", PUBLICKEYBLOB);
@@ -32,10 +34,23 @@ int main()
     DWORD lenBlobImport = 0;
     BYTE* blobImport = getBlob(lenBlobImport, kSign, 0, PUBLICKEYBLOB);
     printBlob(blobImport, lenBlobImport);
-    
+    DWORD lenText = 0;
+    BYTE* encText = ReadBlobFile(lenText, "C:\\EncMessage.bin");
+    HCRYPTKEY kSession = ImportKey("C:\\KeySession.enc", true, hCrProv);
+  
+    HCRYPTHASH hCryptHash = CreateHash(hCrProv);
+    decrypt(kSession, hCryptHash, encText, lenText);
+    std::cout << "\nDecrypted text: ";
+    printBlobStr(encText, lenText);
+    DWORD signDataLen = 0;
+    BYTE* signData = ReadBlobFile(signDataLen, "C:\\SignMessage.bin");
+    bool checkSign = verifySign(hCryptHash, signData, signDataLen, kSign);
+
     std::cout << std::boolalpha;
+    std::cout << "Sign check: " << checkSign << std::endl;
     std::cout << "Destroy sign key: " << (bool)CryptDestroyKey(kSign) << std::endl;
     std::cout << "Destroy exchange key: " << (bool)CryptDestroyKey(kExchange) << std::endl;
+    std::cout << "Destroy hash obj: " << (bool)CryptDestroyHash(hCryptHash) << std::endl;
     
 
     LocalFree(nameProv);

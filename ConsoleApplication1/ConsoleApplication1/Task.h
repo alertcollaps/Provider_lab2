@@ -18,6 +18,12 @@ void Task5(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, LPCWSTR nameCo
 
 void printNamesContFromProv(HCRYPTPROV hCryptProv);
 int cin(std::string str);
+std::string cins(std::string str);
+void SignHash(HCRYPTHASH hHash, BYTE* signData, DWORD& signDataLen);
+
+BYTE* strToBlob(std::string str, DWORD& blobLen);
+
+
 PROV_ENUMALGS parse(BYTE* data);
 void printInfo(PROV_ENUMALGS info);
 HCRYPTKEY genKeyExchange(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, LPCWSTR nameContainer);
@@ -25,6 +31,9 @@ HCRYPTKEY genKeySign(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type);
 void WriteBlobToFile(BYTE* pbData, DWORD cbData, LPCSTR FName);
 BYTE* ReadBlobFile(DWORD& bufLen, LPCSTR nameFile);
 HCRYPTKEY getAsymmetricKey(HCRYPTPROV hCryptProv);
+
+HCRYPTHASH CreateHash(HCRYPTPROV hCryptProv);
+void addToHashData(HCRYPTHASH hHash, BYTE* hData, DWORD hDataLen);
 
 
 HCRYPTKEY genKeyExchange(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, LPCWSTR nameContainer) {
@@ -240,6 +249,36 @@ HCRYPTKEY ImportKey(LPCSTR nameFileKey, bool useProtectedKey, HCRYPTPROV hCryptP
     return kImport;
 }
 
+void addToHashData(HCRYPTHASH hHash, BYTE *hData, DWORD hDataLen) {
+    if (CryptHashData(hHash, hData, hDataLen, 0)) {
+        printf("Add to hash data success!\n");
+        return;
+    }
+    printf("Failed add to hash data!\n");
+}
+
+HCRYPTHASH CreateHash(HCRYPTPROV hCryptProv) {
+    HCRYPTHASH hHash;
+    if (CryptCreateHash(
+        hCryptProv,
+        CALG_SHA1,
+        0,
+        0,
+        &hHash))
+    {
+        printf("An empty hash object has been created. \n");
+    }
+    else
+    {
+        printf("Error during CryptBeginHash!\n");
+        exit(1);
+    }
+
+
+
+    return hHash;
+
+}
 HCRYPTKEY getAsymmetricKey(HCRYPTPROV hCryptProv) {
     HCRYPTKEY out = 0;
     if (!CryptGetUserKey(hCryptProv, AT_KEYEXCHANGE, &out)) {
@@ -365,10 +404,12 @@ HCRYPTKEY genKeySession(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, A
 
 
   
-    wprintf(L"the %s simmetric key container.\n", pszUserName);
+    //wprintf(L"the %s simmetric key container.\n", pszUserName);
     free(pszUserName);
     return hKeySession;
 }
+
+
 
 void WriteBlobToFile(BYTE* pbData, DWORD cbData, LPCSTR FName)
 {
@@ -443,6 +484,84 @@ BYTE* ReadBlobFile(DWORD &bufLen, LPCSTR nameFile) {
     fclose(EncryptedKeyBlob);
     bufLen = dwKeyBlobExportLen;
     return pbKeyBlobExport;
+}
+
+void SignHash(HCRYPTHASH hHash, BYTE** signData, DWORD& signDataLen) {
+    signDataLen = 0;
+    if (CryptSignHash(
+        hHash,
+        AT_SIGNATURE,
+        NULL,
+        0,
+        NULL,
+        &signDataLen))
+    {
+        printf("Signature length %d found.\n", signDataLen);
+    }
+    else
+    {
+        printf("Error during CryptSignHash\n");
+        exit(1);
+    }
+    
+    if (*signData = (BYTE*)malloc(signDataLen))
+    {
+        printf("Memory allocated for the signature.\n");
+    }
+    else
+    {
+        printf("Out of memory\n");
+        exit(1);
+    }
+    
+    if (CryptSignHash(
+        hHash,
+        AT_SIGNATURE,
+        0,
+        0,
+        *signData,
+        &signDataLen))
+    {
+        printf("pbSignature is the hash signature.\n");
+    }
+    else
+    {
+        printf("Error during CryptSignHash.\n");
+        exit(1);
+    }
+    
+}
+
+void encrypt(HCRYPTKEY hKey, HCRYPTHASH hHash, BYTE* dataIn, BYTE** dataOut, DWORD &lenInData) {
+    DWORD buffData = lenInData;
+    if (CryptEncrypt(hKey, hHash, true, 0, 0, &buffData, 0)) {
+        printf("Encryption data buff find!\n");
+        
+    }
+    else {
+        printf("Encryption data buff not find!\n");
+        return;
+    }
+
+    BYTE* dataEnc = (BYTE*)malloc(buffData);
+    std::copy(dataIn, dataIn + lenInData, dataEnc);
+    *dataOut = dataEnc;
+
+    if (CryptEncrypt(hKey, hHash, true, 0, dataEnc, &lenInData, buffData)) {
+        printf("Encryption successfull!\n");
+        return;
+    }
+    printf("Encryption unsuccessfull!\n");
+    return;
+}
+
+void decrypt(HCRYPTKEY hKey, HCRYPTHASH hHash, BYTE* dataIn, DWORD& lenInData) {
+    if (CryptDecrypt(hKey, hHash, true, 0, dataIn, &lenInData)) {
+        printf("Decryption successfull!\n");
+        return;
+    }
+    printf("Decryption unsuccessfull!\n");
+    return;
 }
 
 void Task1(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, LPCWSTR nameContainer) {
@@ -990,6 +1109,21 @@ void printNamesContFromProv(HCRYPTPROV hCryptProv) {
 
 }
 
+std::string cins(std::string str) {
+    std::cout << str;
+    std::string type;
+    std::getline(std::cin >> std::ws, type);
+    
+ 
+    return type;
+}
+
+BYTE *strToBlob(std::string str, DWORD &blobLen) {
+    BYTE* data = (BYTE*)malloc(str.length());
+    std::copy(str.begin(), str.end(), data);
+    blobLen = str.length();
+    return data;
+}
 
 int cin(std::string str) {
     std::cout << str;

@@ -19,42 +19,20 @@ void printNamesContFromProv(HCRYPTPROV hCryptProv);
 int cin(std::string str);
 PROV_ENUMALGS parse(BYTE* data);
 void printInfo(PROV_ENUMALGS info);
-HCRYPTKEY genKeyExchange(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, LPCWSTR nameContainer);
+HCRYPTKEY genKeyExchange(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type);
 HCRYPTKEY genKeySign(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, LPCWSTR nameContainer);
 void WriteBlobToFile(BYTE* pbData, DWORD cbData, LPCSTR FName);
 BYTE* ReadBlobFile(DWORD& bufLen, LPCSTR nameFile);
 void printBlob(BYTE* blob, DWORD lenBlob);
 HCRYPTKEY getAsymmetricKey(HCRYPTPROV hCryptProv);
+void decrypt(HCRYPTKEY hKey, HCRYPTHASH hHash, BYTE* dataIn, DWORD& lenInData);
+HCRYPTHASH CreateHash(HCRYPTPROV hCryptProv);
 
 
-HCRYPTKEY genKeyExchange(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, LPCWSTR nameContainer) {
+HCRYPTKEY genKeyExchange(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type) {
     LPSTR pszUserName;
     DWORD dwUserNameLen;
-    if (CryptAcquireContext(
-        &hCryptProv,
-        nameContainer,
-        pszNameProv,
-        type,
-        0))
-    {
-        printf("A exist key container has been got.\n");
-    }
-    else
-    {
-        if (!CryptAcquireContext(
-            &hCryptProv,
-            nameContainer,
-            pszNameProv,
-            type,
-            CRYPT_NEWKEYSET))
-        {
-            printf("Could not create a new key container.\n");
-            exit(1);
-
-        }
-        printf("A new key container has been created.\n");
-
-    }
+    
 
     //?????
     if (!CryptGetProvParam(
@@ -105,7 +83,7 @@ HCRYPTKEY genKeyExchange(HCRYPTPROV hCryptProv, LPTSTR pszNameProv, DWORD type, 
     }
     else
     {
-        printf("No AT_KEYEXCHANGE key is available.\n");
+        printf("No AT_KEYEXCHANGE key is unavailable.\n");
 
         // Ошибка в том, что контейнер не содержит ключа.
         if (!(GetLastError() == (DWORD)NTE_NO_KEY)) {
@@ -682,19 +660,19 @@ LPTSTR printAndGetProviders(DWORD type) {
     return listNamesProviders[i - 1];
 }
 
-HCRYPTPROV getProvider(LPTSTR pszName, DWORD type) {
+HCRYPTPROV getProvider(LPTSTR pszName, DWORD type, LPCWSTR nameContainer) {
 
     HCRYPTPROV hCryptProv;
     BYTE       pbData[1000];       // 1000 will hold the longest 
                                    // key container name.
-    if (CryptAcquireContext(&hCryptProv, NULL, pszName, type, 0)) {
+    if (CryptAcquireContext(&hCryptProv, nameContainer, pszName, type, 0)) {
         printf("Context has been poluchen\n");
 
     }
     else {
         if (CryptAcquireContext(
             &hCryptProv,
-            NULL,
+            nameContainer,
             pszName,
             type,
             CRYPT_NEWKEYSET))
@@ -918,13 +896,58 @@ HCRYPTKEY ImportKey(LPCSTR nameFileKey, bool useProtectedKey, HCRYPTPROV hCryptP
     DWORD dataLen = 0;
     blobKey = ReadBlobFile(dataLen, nameFileKey);
 
-    if (!CryptImportKey(hCryptProv, blobKey, dataLen, 0, CRYPT_EXPORTABLE, &kImport)) {
+    if (!CryptImportKey(hCryptProv, blobKey, dataLen, kProtected, CRYPT_EXPORTABLE, &kImport)) {
         printf("Error import key. Code: %d\n", GetLastError());
         return kImport;
     }
 
     return kImport;
 }
+
+HCRYPTHASH CreateHash(HCRYPTPROV hCryptProv) {
+    HCRYPTHASH hHash;
+    if (CryptCreateHash(
+        hCryptProv,
+        CALG_SHA1,
+        0,
+        0,
+        &hHash))
+    {
+        printf("An empty hash object has been created. \n");
+    }
+    else
+    {
+        printf("Error during CryptBeginHash!\n");
+        exit(1);
+    }
+
+
+
+    return hHash;
+
+}
+
+bool verifySign(HCRYPTHASH hHash, BYTE* signData, DWORD signLen, HCRYPTKEY hKey) {
+    if (CryptVerifySignature(hHash, signData, signLen, hKey, 0, 0)) {
+        return true;
+    }
+    else if (GetLastError() == NTE_BAD_SIGNATURE) {
+        return false;
+    }
+    printf("Failed signature! Uncknown error!\n");
+    return false;
+}
+
+void decrypt(HCRYPTKEY hKey, HCRYPTHASH hHash, BYTE* dataIn, DWORD& lenInData) {
+    if (CryptDecrypt(hKey, hHash, true, 0, dataIn, &lenInData)) {
+        printf("Decryption successfull!\n");
+        return;
+    }
+    printf("Decryption unsuccessfull!\n");
+    return;
+}
+
+
 
 HCRYPTKEY getAsymmetricKey(HCRYPTPROV hCryptProv) {
     HCRYPTKEY out = 0;
@@ -1059,6 +1082,17 @@ void printBlob(BYTE* blob, DWORD lenBlob) {
 
     while (ptr != ptrEnd) {
         printf("%d ", * ptr);
+        ++ptr;
+    }
+    std::cout << std::endl;
+}
+
+void printBlobStr(BYTE* blob, DWORD lenBlob) {
+    BYTE* ptr = blob;
+    BYTE* ptrEnd = blob + lenBlob;
+
+    while (ptr != ptrEnd) {
+        std::cout << *ptr;
         ++ptr;
     }
     std::cout << std::endl;
